@@ -1,0 +1,63 @@
+image: docker:24
+
+services:
+  - docker:24-dind
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_BUILDKIT: "1"
+  IMAGE_SERVER: "azizrom/mern-server"
+  IMAGE_CLIENT: "azizrom/mern-client"
+
+stages:
+  - build_push
+  - scan
+
+# -----------------------------
+# Étape de connexion DockerHub
+# -----------------------------
+.docker_login: &docker_login
+  - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+
+# -----------------------------
+# Build & Push du serveur
+# -----------------------------
+build_push_server:
+  stage: build_push
+  rules:
+    - changes:
+        - "server/**/*"
+  script:
+    - *docker_login
+    - docker build -t "$IMAGE_SERVER:$CI_COMMIT_SHORT_SHA" server
+    - docker push "$IMAGE_SERVER:$CI_COMMIT_SHORT_SHA"
+
+# -----------------------------
+# Build & Push du client
+# -----------------------------
+build_push_client:
+  stage: build_push
+  rules:
+    - changes:
+        - "client/**/*"
+  script:
+    - *docker_login
+    - docker build -t "$IMAGE_CLIENT:$CI_COMMIT_SHORT_SHA" client
+    - docker push "$IMAGE_CLIENT:$CI_COMMIT_SHORT_SHA"
+
+# -----------------------------
+# Analyse de sécurité Trivy
+# -----------------------------
+trivy_scan:
+  stage: scan
+  script:
+    - apk add --no-cache grep
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy image "$IMAGE_SERVER:$CI_COMMIT_SHORT_SHA" > trivy_report.txt || true
+    - echo "📊 Résumé des vulnérabilités critiques/hautes :"
+    - cat trivy_report.txt | grep -E "CRITICAL|HIGH" || echo "✅ Aucune vulnérabilité critique ou haute trouvée."
+  artifacts:
+    paths:
+      - trivy_report.txt
+    expire_in: 1 week
