@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mern-client
+  template:
+    metadata:
+      labels:
+        app: mern-client
+    spec:
+      containers:
+      - name: mern-client
+        image: azizrom/mern-client:v2
+        ports:
+        - containerPort: 3000   # si client servi via dev server ; sinon 80 si nginx
+        envFrom:
+        - configMapRef:
+            name: app-configmap
